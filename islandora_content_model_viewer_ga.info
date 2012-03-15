@@ -1,0 +1,7 @@
+name = Google Analytics Statistics for Islandora Content Model Viewer
+description = "Google Analytics Statistics for Islandora Content Model Viewer."
+core = 6.x
+package = Statistics
+dependencies[] = content_model_viewer
+dependencies[] = googleanalytics
+dependencies[] = google_analytics_reports

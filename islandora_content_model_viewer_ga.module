@@ -1,0 +1,105 @@
+<?php
+
+/**
+ * Implementation of hook_menu().
+ */
+function islandora_content_model_viewer_ga_menu() {
+  $items = array();
+  $items['viewer_analytics/fetch'] = array(
+    'title' => t('Object Statistics'),
+    'page callback' => 'islandora_content_model_viewer_ga_callback',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function islandora_content_model_viewer_ga_init() {
+  drupal_add_js(drupal_get_path('module', 'islandora_content_model_viewer_ga') .'/analytics.js');
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function islandora_content_model_viewer_ga_perm() {
+  return array('view object analytics', 'view analytics deeplink');
+}
+
+function islandora_content_model_viewer_ga_callback() {
+  $pid = $_POST['pid'];
+  $url = check_url($_POST['url']);
+  
+  // Try to match last 3 parts of path: multilingual sites count content separately
+  $url_parts = explode("/", $url);
+  $url_parts_count = count($url_parts);
+  if ($url_parts_count < 4) {
+    $filter_url = $url;
+  }
+  else {
+    $filter_url = '';
+    for ($i = 1; $i < 4; $i++) {
+      $filter_url = '/' . $url_parts[$url_parts_count - $i] . $filter_url;
+    }
+  }
+  
+  $params = array(
+    'metrics' => array('ga:pageviews'),
+    'filters' => 'ga:pagePath=~' . $filter_url,
+    'start_date' => strtotime('-5 years'),
+    'end_date' => strtotime('-1 day'),
+  );
+  
+  $page_views = google_analytics_api_report_data($params);
+  
+  if (!$page_views->error) {
+    if (isset($page_views->results[0]['pageviews'])) {
+      $view_count = check_plain($page_views->results[0]['pageviews']);
+    }
+    else {
+      $view_count = 0;
+    }
+    
+    //@TODO: abstract to any datastream
+    $pdf_url = '/viewer/' . $pid . '/PDF/download';
+    
+    $params_dl = array(
+      'metrics' => array('ga:pageviews'),
+      'filters' => 'ga:pagePath=~' . $pdf_url,
+      'start_date' => strtotime('-5 years'),
+      'end_date' => strtotime('-1 day'),
+    );
+    $downloads = google_analytics_api_report_data($params_dl);
+    
+    if (!$downloads->error) {
+      if (isset($downloads->results[0]['pageviews'])) {
+        $dl_count = check_plain($downloads->results[0]['pageviews']);
+      }
+      else {
+        $dl_count = 0;
+      }
+    }
+  }
+  
+  if (user_access('view object analytics')) {
+    $response['status'] = 'ok';
+    $response['views'] = $view_count;
+    $response['downloads'] = $dl_count;
+  }
+  else {
+    $response['status'] = 'unauthorized';
+  }
+  
+  /*
+  if (user_access('view analytics deeplink')) {
+    $analytics_url = 'https://www.google.com/analytics/web/#report/content-pages/a29809418w56072250p57139104/%3F_r.drilldown%3Danalytics.pagePath%3A';
+    $analytics_url = $analytics_url . urlencode($url) . '%26explorer-table.secSegmentId%3Danalytics.country/'; // Send to country breakdown
+    $response['analytics_link'] = $analytics_url;
+  }
+  */
+  
+  print drupal_json($response);
+  die();
+}
